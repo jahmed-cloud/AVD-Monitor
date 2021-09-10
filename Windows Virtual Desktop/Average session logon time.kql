@@ -1,0 +1,16 @@
+// Average session logon time 
+// Average session logon time by Hostpool. 
+// Lists average session logon time by hostpool 
+WVDConnections  
+| where TimeGenerated > ago(24h)  
+| where State == "Started"  
+| project CorrelationId , UserName, ConnectionType , StartTime=TimeGenerated, _ResourceId 
+| join (WVDConnections
+    | where State == "Connected"  
+    | project EndTime=TimeGenerated, CorrelationId)  
+    on CorrelationId  
+| project Duration = EndTime - StartTime, _ResourceId  
+| summarize AvgDuration=avg(Duration) by _ResourceId
+| extend Multi=split(_ResourceId, "/")  
+| project AvgDuration, ResourceGroup=Multi[4], HostPool=Multi[8]  
+| sort by AvgDuration desc 

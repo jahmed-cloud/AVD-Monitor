@@ -1,0 +1,5 @@
+ Event
+| where  EventLog == "System" and Source == "User32" and EventID == 1074
+| search "shutdown"
+| sort by TimeGenerated desc 
+| project TimeGenerated, Computer

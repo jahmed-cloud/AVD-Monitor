@@ -1,0 +1,23 @@
+Event
+| where Source == "Microsoft.RDInfra.RDAgent.EtwReader.FSLogixParser"
+|parse RenderedDescription with * "ActivityID=" ActivityID
+                                    "EventName=" EventName
+                                    "ProviderName="ProviderName
+                                  "CheckpointName=" Checkpoint_Name
+                                   "ActivityType=" Activity_Type                 
+                                    "SessionID=" Session_ID
+                                   "Username=" UserName
+                                   "Sid=" SID
+                                   "OpTimeInMillis=" Timetaken_In_Milliseconds
+|project TimeGenerated, ActivityID, Checkpoint_Name, Activity_Type, Session_ID, UserName, SID, Timetaken_In_Milliseconds
+
+
+
+//Health part
+|join kind = inner (Event
+| where Source == "Microsoft.RDInfra.RDAgent.Service.FSLogixHealthCheck"
+|parse RenderedDescription with  "FSLogixHealthCheck-CheckFSLogixHealthOnSessionHost SessionHost healthy:" SessionHost_Health
+                                    ". healthy=" Health
+                                    "ProfileRegistryStatus=" ProfileRegistryStatus
+                                    "msg=" msg) on TimeGenerated
+|project SessionHost_Health, ProfileRegistryStatus, TimeGenerated, ActivityID, Checkpoint_Name, Activity_Type, Session_ID, UserName, SID, Timetaken_In_Milliseconds

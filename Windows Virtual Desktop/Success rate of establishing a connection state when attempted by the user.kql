@@ -1,0 +1,93 @@
+// Success rate of establishing a connection state when attempted by the user
+WVDConnections
+| join kind=leftsemi
+(
+    WVDConnections
+    | where TimeGenerated {TimeRange}
+    | distinct CorrelationId
+) on CorrelationId
+//| where State =="Completed"// in ("Connected", "Completed")
+| summarize arg_max(TimeGenerated, *) by CorrelationId
+| where _ResourceId startswith "{HostPool}"
+| extend HostPool = '{HostPool:label}/'
+| extend ComputerName = strcat(HostPool, SessionHostName)
+| where ComputerName in ({WVDHosts})
+| join kind=leftouter
+(
+    WVDCheckpoints
+    | where Source == "RDStack" and Name == "RdpStackConnectionEstablished"
+    | project CorrelationId, Connected=true
+) on CorrelationId
+| extend Connected=coalesce(Connected, false)
+// Split the activity ID into the "session ID" (first 36-4=32 characters of the GUID, same value for all reconnections) and the last 4 characters are the attempt index (0 for initial connection, increment for each reconnect)
+| extend SessionId=substring(CorrelationId, 0, 36 - 4),
+         AttemptIndex=toint(strcat("0x", substring(CorrelationId, 36 - 2), substring(CorrelationId, 36 - 4, 2))) // Swap the last two pairs of characters, and intrepret as hex
+// For each attempt in a session, verify that checkpoints from the host confirm the connection
+| summarize Success=countif(Connected)>0, StartTime=min(TimeGenerated) by SessionId
+| make-series 
+    SuccessSessions=dcountif(SessionId, Success) default=0,
+    ErrorSessions=dcountif(SessionId, not(Success)) default=0
+    on StartTime step {TimeRange:grain}
+{FocusFailures}
+
+
+
+
+Query for potential connectivity issues:
+-	Shows any host/user/resource that has not had a successful connection in the set time range
+
+let GetConnectionFailures = (BaseData:(Slicer:string, CorrelationId:string, UserName:string, ResourceAlias:string, SessionHostName:string, Client:string, TimeGenerated:datetime , Connected:bool), ViewName:string)
+{
+    BaseData
+    | summarize Users=dcount(UserName), Resources=dcount(ResourceAlias), Hosts=dcount(SessionHostName), Clients=dcount(Client), LastAttempt=max(TimeGenerated), Attempts=dcount(CorrelationId), View=ViewName, Activities=makeset(CorrelationId)
+             by Slicer, Connected
+    | as BySlicer
+    | where Connected != true
+    | join kind=leftanti // Exclude the users that managed to connect
+    (
+        BySlicer
+        | where Connected
+    ) on Slicer
+    | project-away Connected
+};
+WVDConnections
+| where State == "Completed"
+| where _ResourceId startswith "{HostPool}"
+| extend HostPool = '{HostPool:label}/'
+| extend ComputerName = strcat(HostPool, SessionHostName)
+| where ComputerName in ({WVDHosts})
+| join kind=leftouter
+(
+    WVDCheckpoints
+    | where Source == "RDStack" and Name == "RdpStackConnectionEstablished"
+    | project CorrelationId, Connected=true
+) on CorrelationId
+| extend SessionHostName=trim_end(@"\..*", SessionHostName), Client=strcat(replace("com.microsoft.rdc.", "", ClientType), " ", ClientVersion)
+| as BaseData
+| extend Slicer=UserName
+| invoke GetConnectionFailures("User")
+| union 
+(
+    BaseData
+    | extend Slicer=Client
+    | invoke GetConnectionFailures("Client")
+)
+| union 
+(
+    BaseData
+    | extend Slicer=SessionHostName
+    | invoke GetConnectionFailures("Host")
+)
+| union 
+(
+    BaseData
+    | extend Slicer=ResourceAlias
+    | invoke GetConnectionFailures("Resource")
+)
+| where strlen(Slicer) > 2
+| where View == "{ReportBy}"
+| sort by View, Attempts desc 
+| project {ReportBy}=Slicer, Attempts, LastAttempt, Users, Resources, Hosts, Clients, Activities, Slicer
+| project-away {ReportBy}s // Remove the count of the dimension used as a slicer, since it will always be 1
+          
+

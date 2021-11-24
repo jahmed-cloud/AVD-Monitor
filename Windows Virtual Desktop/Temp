@@ -1,0 +1,21 @@
+AzureMetrics
+|where ResourceProvider == "MICROSOFT.NETWORK"
+|where MetricName == "DataProcessed"
+|summarize format_bytes( sum(Total),0,"GB") by Resource, UnitName
+
+//Query to show the Egress avg
+AzureMetrics
+|where ResourceProvider == "MICROSOFT.STORAGE"
+|where MetricName == "Egress"
+|summarize Egress_Avg = format_bytes(avg(Average),0,"KB")by Resource
+
+//Query to show the Ingress avg
+AzureMetrics
+|where ResourceProvider == "MICROSOFT.STORAGE"
+|where MetricName == "Ingress"
+|summarize Egress_Avg = format_bytes(avg(Average),0,"KB")by Resource
+
+//Query to show the Throughput avg
+AzureMetrics
+|where ResourceProvider == "MICROSOFT.NETWORK"
+|summarize Throughput = format_bytes(avg(Total), 0, "MB") by Resource

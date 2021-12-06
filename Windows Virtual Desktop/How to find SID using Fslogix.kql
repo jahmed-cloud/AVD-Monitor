@@ -1,6 +1,6 @@
 Event
 | where Source == "Microsoft.RDInfra.RDAgent.EtwReader.FSLogixParser"
-| search "usernamed"
+| search "user name"
 |parse RenderedDescription with * "ActivityID=" ActivityID
                                     "EventName=" EventName
                                     "ProviderName="ProviderName

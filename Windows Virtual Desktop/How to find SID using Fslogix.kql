@@ -1,7 +1,7 @@
 Event
 | where Source == "Microsoft.RDInfra.RDAgent.EtwReader.FSLogixParser"
 | search "user_name"
-|parse RenderedDescription with * "ActivityID=" ActivityID
+| parse RenderedDescription with * "ActivityID=" ActivityID
                                     "EventName=" EventName
                                     "ProviderName="ProviderName
                                   "CheckpointName=" Checkpoint_Name
